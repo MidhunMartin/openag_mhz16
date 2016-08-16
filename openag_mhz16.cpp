@@ -24,14 +24,27 @@ void MHZ16::begin() {
 }
 
 void MHZ16::update() {
+  uint32_t curr_time = millis();
+  // Handle clock rollover
+  if (_time_of_last_power_cycle > curr_time || _time_of_last_reading > curr_time) {
+    _time_of_last_reading = 0;
+    _sensor.power_off();
+    _is_on = false;
+    _time_of_last_power_cycle = curr_time;
+    status_level = WARN;
+    status_msg = "Powered off to prevent autocalibration";
+    return;
+  }
+  // Turn the sensor back of it it's been off for a while
   if (!_is_on) {
-    if (millis() - _time_of_last_power_cycle > _leave_off_for) {
+    if (curr_time - _time_of_last_power_cycle > _leave_off_for) {
       begin();
     }
     return;
   }
+  // Wait 10 seconds for initialization
   if (_initializing) {
-    if (millis() - _init_time < 10000) {
+    if (curr_time - _init_time < 10000) {
       return;
     }
     else {
@@ -40,14 +53,16 @@ void MHZ16::update() {
       status_msg = "";
     }
   }
-  if (millis() - _time_of_last_power_cycle > _power_cycle_interval) {
+  // Turn off the sensor every once in a while
+  if (curr_time - _time_of_last_power_cycle > _power_cycle_interval) {
     _sensor.power_off();
     _is_on = false;
-    _time_of_last_power_cycle = millis();
+    _time_of_last_power_cycle = curr_time;
     status_level = WARN;
     status_msg = "Powered off to prevent autocalibration";
   }
-  if (millis() - _time_of_last_reading > _min_update_interval) {
+  // Read from the sensor
+  if (curr_time - _time_of_last_reading > _min_update_interval) {
     if (_sensor.measure()) {
       if (status_level == OK) {
         _send_air_carbon_dioxide = true;
@@ -62,6 +77,7 @@ void MHZ16::update() {
         status_level = ERROR;
         status_msg = "Failed to read from sensor";
       }
+      begin();
     }
   }
 }
